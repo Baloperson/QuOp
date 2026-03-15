@@ -1,0 +1,8 @@
+{
+  "name": "tinyset",
+  "version": "2.6.0",
+  "description": "Lightweight isomorphic state container with spatial queries",
+  "type": "module",
+  "main": "tinyset.js",
+  "files": ["tinyset.js", "tinyset-plus.js"]
+}
