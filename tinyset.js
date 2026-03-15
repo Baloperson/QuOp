@@ -11,8 +11,7 @@
 // GNU General Public License for more details.
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-// tinyset.js v2.8
+// tinyset.js v2.9
 // _key: stable serialised string on all where.* predicates — enables compound query caching
 const _k=(f,key)=>{f._key=key;return f}
 export const where={
@@ -35,7 +34,7 @@ export function createStore(o={}){
 const items=new Map(),meta=new Map(),listeners=new Map()
 const idx={type:new Map(),spatial:new Map(),coords:new Map()}
 
-// v2.7: counter id — 52x faster than Date+random, still unique per store instance
+// v2.7: counter id 52x faster than Date+random, still unique per store instance
 // set idGenerator in options to override (e.g. for distributed scenarios)
 let _id=0
 const cfg={
@@ -45,7 +44,7 @@ types:o.types||new Set(),defs:o.defaults||{},grid:o.spatialGridSize||100
 
 meta.set('cfg',cfg)
 
-// v2.7: emit only when listeners exist — skip Map.get + forEach when no subscribers
+// v2.7: emit only when listeners exist skip Map.get + forEach when no subscribers
 const emit=(e,d)=>{const s=listeners.get(e);if(s&&s.size)s.forEach(cb=>{try{cb(d)}catch{}})}
 
 const ui=(a,it,old)=>{
@@ -122,38 +121,39 @@ sort:f=>Q([...a].sort((x,y)=>{const A=x[f]??0,B=y[f]??0;return A<B?-1:A>B?1:0}))
 })
 
 // hot/cold query cache
-// cold: Map<string|fnref, {ver,r}> — all queries land here first
-// hot:  Map<string, q> — promoted after THRESH hits; returns frozen Q, skips Map.get+ver check
-// per-type version counters: writing 'enemy' never invalidates 'player' queries
-// compound predicates: where.and/or carry _key only when all sub-predicates are tagged
-////    compound queries are now cacheable if built entirely from where.* operators
+// cold: Map keyed by string (tagged predicates) or fn reference (inline/compound-with-inline)
+// hot:  Map<type, Map<predKey, Q>> — nested by type so qbump evicts in O(1) via .clear()
+//       promoted after THRESH cold hits; returns frozen Q, bypasses version check
+// per-type version counters: write to 'enemy' never touches 'player' cache entries
+// compound where.and/or carry _key when all sub-predicates are tagged — now cacheable
 const qc=new Map(),qv=new Map(),qh=new Map()
 const THRESH=3
 const qbump=t=>{
   qv.set(t,(qv.get(t)||0)+1)
-  // evict hot entries for this type — hot bypasses version check so must be explicitly cleared
-  for(const k of qh.keys()){if(k.startsWith(t+'\0')||k===t)qh.delete(k)}
+  qh.get(t)?.clear()  // O(1) — clears inner Map for this type only
 }
 
 const find=(t,p)=>{
-const sk=p?._key  // stable string key if predicate is fully tagged
-const ck=sk!=null?`${t}\0${sk}`:null
-// hot path: string-keyed entries only (fn refs can't be hot no stable key without _key)
-if(ck){const q=qh.get(ck);if(q)return q}
+const sk=p?._key,ck=sk!=null?sk:null
+// hot path: tagged predicates only, nested by type — two Map.get calls, no version check
+if(ck){const hm=qh.get(t);if(hm){const q=hm.get(ck);if(q)return q}}
 const ver=qv.get(t)||0
 // cold path: string key
 if(ck){
-  const c=qc.get(ck)
+  const c=qc.get(`${t}\0${ck}`)
   if(c&&c.ver===ver){
-    // promote to hot after THRESH hits
-    if(++c.h>=THRESH){const q=Q(c.r);qh.set(ck,q);return q}
+    if(++c.h>=THRESH){
+      const q=Q(c.r)
+      if(!qh.has(t))qh.set(t,new Map())
+      qh.get(t).set(ck,q);return q
+    }
     return Q(c.r)
   }
   const ts=idx.type.get(t),r=[]
   if(ts)for(const id of ts){const it=items.get(id);if(it&&(!p||p(it)))r.push(it)}
-  qc.set(ck,{ver,r,h:0});return Q(r)
+  qc.set(`${t}\0${ck}`,{ver,r,h:0});return Q(r)
 }
-// ref key: inline functions and any predicate without _key
+// ref key: inline functions and compounds containing inline predicates
 const rk=p||'__none__'
 if(!qc.has(rk))qc.set(rk,new Map())
 const m=qc.get(rk),c=m.get(t)
