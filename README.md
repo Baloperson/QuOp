@@ -7,8 +7,8 @@ TinySet provides a unified data layer that works identically in browsers, Node.j
 > The code written with Tinyset reads like the question you're asking, not like the data structure that's querying it.
 
 ```
-Core:    ~5kB  | 115 lines
-Plus:    +4kB  | +25 lines
+Core:    ~5kB  | 142 lines
+Plus:    +4kB  | +24 lines
 Total:   ~9kB
 ```
 
