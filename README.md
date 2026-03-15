@@ -5,9 +5,9 @@ A lightweight, isomorphic state container with built-in queries, transactions, a
 TinySet provides a unified data layer that works identically in browsers, Node.js, and React Native. The core library handles local state with advanced querying; the optional `+` extension adds distributed features with causal consistency.
 
 ```
-Core:    ~5kB gzipped | 500 lines
-Plus:    +2kB gzipped | +200 lines
-Total:   ~7kB gzipped
+Core:    ~5kB  | 150 lines
+Plus:    +4kB  | +25 lines
+Total:   ~9kB 
 ```
 
 ## Installation
