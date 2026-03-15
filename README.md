@@ -141,7 +141,7 @@ For pure geometry performance, dedicated spatial libraries are faster: RBush at 
 ## Installation
 
 ```bash
-curl -O https://raw.githubusercontent.com/Baloperson/tinyop/main/tinyop.js
+curl -O https://github.com/Baloperson/TinyOp/main/tinyop.js
 ```
 
 Or just download `tinyop.js`. No build step. No package manager required. It's one file.
