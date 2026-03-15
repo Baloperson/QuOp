@@ -67,6 +67,9 @@ It wins on **mixed workloads** — the benchmark that reflects real game loops a
 
 All benchmarks run on Node v24, Intel Xeon Platinum 8370C, median of 15 runs. Compared against LokiJS, NodeCache, MemoryCache, Lodash collections, Immutable.js, and raw Array/Object stores.
 
+> **Hardware variance.** Absolute numbers scale with your CPU — expect 2–3× lower figures on older or low-power hardware (Tested on AMD FX-6350 scores roughly half these numbers). What stays stable across machines is the *relative ordering*
+
+
 ### Mixed workload — 10,000 operations (40% read, 20% update, 20% simple find, 20% compound find)
 
 | Library | ops/sec |
