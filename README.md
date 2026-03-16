@@ -154,53 +154,55 @@ Or just download `tinyop.js`. No build step. No package manager required. It's o
 
 ## API
 
-### Creating a store
+
+
+###Creating a store
 
 ```js
 const store = createStore({
   spatialGridSize: 100,                          // grid cell size for spatial index (default 100)
-  types: new Set(['player', 'enemy', 'bullet']), // optional type validation
+  types: new Set(['foo', 'bar', 'baz']),         // optional type validation
   defaults: {
-    enemy: { hp: 30, alive: true }               // default props per type
+    foo: { count: 0, active: true }              // default props per type
   },
-  idGenerator: () => myCustomId()                // optional custom ID function
+  idGenerator: () => customId()                   // optional custom ID function
 })
 ```
 
-### Creating entities
+###Creating entities
 
 ```js
 // create — returns the new entity
-const enemy = store.create('enemy', { x: 100, y: 200, hp: 50 })
+const item = store.create('foo', { x: 100, y: 200, count: 5 })
 
 // createMany — create multiple entities of the same type
-const enemies = store.createMany('enemy', [
-  { x: 100, y: 200, hp: 50 },
-  { x: 300, y: 400, hp: 30 }
+const items = store.createMany('foo', [
+  { x: 100, y: 200, count: 5 },
+  { x: 300, y: 400, count: 3 }
 ])
 ```
 
-### Mutating entities
+###Mutating entities
 
 ```js
 // update — merges changes, updates modified timestamp
-store.update(enemy.id, { hp: 30 })
+store.update(item.id, { count: 3 })
 
 // functional updater — receives current state, returns changes
-store.update(enemy.id, old => ({ hp: old.hp - 10 }))
+store.update(item.id, old => ({ count: old.count - 1 }))
 
 // set — single field shorthand
-store.set(enemy.id, 'hp', 30)
+store.set(item.id, 'count', 3)
 
 // increment — atomic field increment
-store.increment(enemy.id, 'score', 10)
+store.increment(item.id, 'count', 1)
 
 // delete — returns the deleted entity
-store.delete(enemy.id)
+store.delete(item.id)
 store.deleteMany([id1, id2, id3])
 ```
 
-### Reading entities
+###Reading entities
 
 ```js
 // safe get — returns a shallow copy
@@ -210,30 +212,30 @@ const entity = store.get(id)
 const entity = store.getRef(id)
 
 // pick — returns only specified fields
-const pos = store.pick(id, ['x', 'y'])
+const fields = store.pick(id, ['x', 'y'])
 
 // exists
 if (store.exists(id)) { ... }
 ```
 
-### Querying
+###Querying
 
 ```js
 // find by type with optional predicate
-const enemies = store.find('enemy').all()
-const alive = store.find('enemy', e => e.hp > 0).all()
+const all = store.find('foo').all()
+const filtered = store.find('foo', e => e.count > 0).all()
 
 // spatial — find entities within radius, sorted by distance
-const nearby = store.near('enemy', x, y, radius).all()
-const nearAlive = store.near('enemy', x, y, 100, e => e.hp > 0).first()
+const nearby = store.near('foo', x, y, radius).all()
+const nearFiltered = store.near('foo', x, y, 100, e => e.count > 0).first()
 
 // count shorthand
-const total = store.count('enemy')
-const aliveCount = store.count('enemy', e => e.hp > 0)
+const total = store.count('foo')
+const filteredCount = store.count('foo', e => e.count > 0)
 
 // query chain
-store.find('enemy', where.gt('hp', 0))
-  .sort('hp')
+store.find('foo', where.gt('count', 0))
+  .sort('count')
   .limit(5)
   .offset(0)
   .all()    // → array
@@ -243,27 +245,27 @@ store.find('enemy', where.gt('hp', 0))
   .ids()    // → array of ids
 ```
 
-### `where` predicates
+###where predicates
 
 ```js
-where.eq('tier', 'elite')
-where.ne('status', 'dead')
-where.gt('hp', 50)
-where.gte('level', 10)
+where.eq('status', 'active')
+where.ne('mode', 'disabled')
+where.gt('value', 50)
+where.gte('priority', 10)
 where.lt('ttl', 0)
 where.lte('price', 100)
-where.in('tier', ['elite', 'boss'])
-where.contains('name', 'Sword')
-where.startsWith('id', 'player-')
-where.exists('target')
+where.in('category', ['a', 'b', 'c'])
+where.contains('name', 'pattern')
+where.startsWith('id', 'prefix-')
+where.exists('reference')
 
 // compose — all tagged predicates produce stable cache keys
-where.and(where.eq('tier', 'elite'), where.gt('hp', 0))
-where.or(where.eq('tier', 'boss'), where.gte('score', 500))
-where.and(where.or(where.eq('zone', 'a'), where.eq('zone', 'b')), where.gt('hp', 0))
+where.and(where.eq('status', 'active'), where.gt('value', 0))
+where.or(where.eq('mode', 'auto'), where.gte('priority', 5))
+where.and(where.or(where.eq('zone', '1'), where.eq('zone', '2')), where.gt('value', 0))
 ```
 
-### Events
+###Events
 
 ```js
 // subscribe — returns unsubscribe function
@@ -277,24 +279,24 @@ store.once('create', callback)  // fires once then removes itself
 off()  // unsubscribe
 ```
 
-### Transactions
+###Transactions
 
 ```js
 // all-or-nothing — rolls back on throw
 store.transaction(() => {
-  store.update(playerId, { hp: 0 })
-  store.delete(playerId)
-  store.create('ghost', { x: 100, y: 200 })
+  store.update(id1, { value: 0 })
+  store.delete(id2)
+  store.create('foo', { x: 100, y: 200 })
 })
 ```
 
-### Stats and introspection
+###Stats and introspection
 
 ```js
 store.stats()
 // {
 //   items: 1204,
-//   types: { player: 1, enemy: 847, bullet: 356 },
+//   types: { foo: 847, bar: 356, baz: 1 },
 //   spatial: { cells: 42, coords: 1204 },
 //   listeners: { change: 3 }
 // }
@@ -302,6 +304,7 @@ store.stats()
 store.dump()   // plain object of all items (shallow copies)
 store.clear()  // removes everything, returns count
 ```
+
 
 
 ## Tests
