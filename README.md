@@ -21,21 +21,25 @@ import { createStore, where } from './tinyop.js'
 
 const store = createStore({ spatialGridSize: 100 })
 
-const player = store.create('player', { x: 100, y: 200, hp: 100 })
-store.create('enemy', { x: 115, y: 210, hp: 50, tier: 'elite' })
-store.create('enemy', { x: 400, y: 300, hp: 50, tier: 'normal' })
+// Create typed entities with any schema
+const a = store.create('typeA', { x: 100, y: 200, value: 100, tag: 'foo' })
+store.create('typeA', { x: 115, y: 210, value: 50, tag: 'bar' })
+store.create('typeB', { x: 400, y: 300, value: 50, tag: 'baz' })
 
-// spatial query — grid-indexed, not a linear scan
-const nearby = store.near('enemy', player.x, player.y, 80).all()
+// Spatial query — grid-indexed, finds entities near a point
+const nearby = store.near('typeA', a.x, a.y, 80).all()
 
-// compound filter
-const threats = store.find('enemy', where.and(
-  where.eq('tier', 'elite'),
-  where.gt('hp', 0)
-)).sort('hp').all()
+// Compound filter — multiple conditions combined
+const filtered = store.find('typeA', where.and(
+  where.eq('tag', 'bar'),
+  where.gt('value', 0)
+)).sort('value').all()
 
-store.on('delete', e => console.log(`${e.item.type} destroyed`))
-store.update(nearby[0].id, { hp: 0 })
+// React to changes
+store.on('delete', e => console.log(`${e.item.type} removed`))
+
+// Atomic updates
+store.update(nearby[0].id, { value: 0 })
 store.delete(nearby[0].id)
 ```
 
