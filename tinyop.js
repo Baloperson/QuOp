@@ -11,11 +11,11 @@
 // GNU General Public License for more details.
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
-// tinyop.js v3.0
-
+// tinyop.js v3.1
 // counter ids: 52x faster than Date+random, unique per store; override via idGenerator
 // in-place mutation on update: get() returns copy, getRef() exposes live ref intentionally  
-// numeric spatial key cx*1e6+cy: no string alloc, 5x faster Map lookup than template literal
+// numeric spatial key cx*1e9+cy: no string alloc, 5x faster Map lookup than template literal 
+// 1e9 ensures no collisions for worlds up to 100 billion units tall (gridSize=100)
 // single Date.now() per write, emit skipped when no listeners registered
 // query cache: zero-warmup single-tier, nested Map<type,Map<key,Q>> evicts in O(1) on write
 // compound where.and/or carry _key when all args are tagged — cacheable without fn identity
@@ -53,15 +53,15 @@ const ui=(a,it,old)=>{
 let t=idx.type.get(it.type)
 if(!t)idx.type.set(it.type,t=new Set())
 if(a=='add')t.add(it.id)
-else if(a=='remove')t.delete(it.id)
+else if(a=='remove'){t.delete(it.id);if(!t.size)idx.type.delete(it.type)}
 else if(a=='update'&&old?.type!==it.type){idx.type.get(old.type)?.delete(it.id);t.add(it.id)}
 if(it.x!=null){
-const g=cfg.grid,cx=Math.floor(it.x/g),cy=Math.floor(it.y/g),k=cx*1e6+cy
+const g=cfg.grid,cx=Math.floor(it.x/g),cy=Math.floor(it.y/g),k=cx*1e9+cy
 idx.coords.set(it.id,{x:it.x,y:it.y})
 if(a=='add'){if(!idx.spatial.has(k))idx.spatial.set(k,new Set());idx.spatial.get(k).add(it.id)}
 else if(a=='remove'){idx.spatial.get(k)?.delete(it.id);idx.coords.delete(it.id)}
 else if(a=='update'&&old){
-const ocx=Math.floor(old.x/g),ocy=Math.floor(old.y/g),ok=ocx*1e6+ocy
+const ocx=Math.floor(old.x/g),ocy=Math.floor(old.y/g),ok=ocx*1e9+ocy
 if(ok!==k){idx.spatial.get(ok)?.delete(it.id);if(!idx.spatial.has(k))idx.spatial.set(k,new Set());idx.spatial.get(k).add(it.id)}
 }}
 }
@@ -73,8 +73,9 @@ if(old){
 const inTx=!!meta.get('tx')
 const prev={type:old.type,x:old.x,y:old.y}
 const snap=(!o.silent||inTx)?{...old}:null
+const nextType=(changes.type)||old.type
+if(cfg.types.size&&!cfg.types.has(nextType))throw Error(`Invalid type: ${nextType}`)
 Object.assign(old,changes);old.modified=now;it=old
-if(cfg.types.size&&!cfg.types.has(it.type))throw Error(`Invalid type: ${it.type}`)
 items.set(id,it);ui('update',it,prev);qbump(it.type)
 if(!o.silent){emit('update',{id,item:it,old:snap});emit('change',{type:'update',id,item:it})}
 meta.get('tx')?.at(-1)?.push({type:'update',id,old:snap,new:{...it}})
@@ -96,7 +97,7 @@ const minCY=Math.floor((y-max)/g),maxCY=Math.floor((y+max)/g)
 const cand=new Set()
 for(let cx=minCX;cx<=maxCX;cx++)
 for(let cy=minCY;cy<=maxCY;cy++)
-idx.spatial.get(cx*1e6+cy)?.forEach(id=>ts.has(id)&&cand.add(id))
+idx.spatial.get(cx*1e9+cy)?.forEach(id=>ts.has(id)&&cand.add(id))
 const r=[]
 for(const id of cand){
 const p0=idx.coords.get(id);if(!p0)continue
@@ -112,36 +113,47 @@ limit:n=>Q(a.slice(0,n)),offset:n=>Q(a.slice(n)),
 sort:f=>Q([...a].sort((x,y)=>{const A=x[f]??0,B=y[f]??0;return A<B?-1:A>B?1:0}))
 })
 
-// qh: Map<type,Map<key,Q>> for tagged predicates — evict by type in O(1)
-// qh: Map<fnRef,Map<type,Q>> for inline predicates — delete type entry on bump
-// zero warmup: miss populates immediately, hit returns on next call
-const qh=new Map(),qv=new Map()
+// query cache: zero-warmup, single-tier
+// tagged preds: qh Map<type, Map<key,Q>> — evict type in O(1) on write
+// inline preds: qi Map<fnRef, Map<type,Q>> — separate map, delete type entry on write
+// MAX_QH: cap per-type cache to prevent unbounded growth from dynamic predicates
+const qh=new Map(),qi=new Map(),qv=new Map()
+const MAX_QH=128
 const qbump=t=>{
   qv.set(t,(qv.get(t)||0)+1)
   qh.get(t)?.clear()
-  for(const[k,v]of qh)if(typeof k!=='string'&&v instanceof Map)v.delete(t)
+  for(const[,v]of qi)v.delete(t)  // O(n_unique_inline_preds) — bounded by MAX_QH
 }
 
 const find=(t,p)=>{
 const ck=p?._key??null
 if(ck!=null){
-  const hm=qh.get(t);if(hm){const q=hm.get(ck);if(q)return q}
+  // tagged predicate — stable string key, nested by type
+  let hm=qh.get(t);if(hm){const q=hm.get(ck);if(q)return q}
   const ts=idx.type.get(t),r=[]
   if(ts)for(const id of ts){const it=items.get(id);if(it&&(!p||p(it)))r.push(it)}
-  const q=Q(r);if(!qh.has(t))qh.set(t,new Map());qh.get(t).set(ck,q);return q
+  const q=Q(r)
+  if(!hm){hm=new Map();qh.set(t,hm)}
+  if(hm.size>=MAX_QH)hm.delete(hm.keys().next().value)  // evict oldest
+  hm.set(ck,q);return q
 }
+// inline/compound-with-inline — keyed by function reference
 const rk=p||'__none__'
-if(!qh.has(rk))qh.set(rk,new Map())
-const m=qh.get(rk),c=m.get(t);if(c)return c
+let m=qi.get(rk);if(m){const c=m.get(t);if(c)return c}
 const ts=idx.type.get(t),r=[]
 if(ts)for(const id of ts){const it=items.get(id);if(it&&(!p||p(it)))r.push(it)}
-const q=Q(r);m.set(t,q);return q
+const q=Q(r)
+if(!m){
+  if(qi.size>=MAX_QH)qi.delete(qi.keys().next().value)  // evict oldest inline pred
+  m=new Map();qi.set(rk,m)
+}
+m.set(t,q);return q
 }
 
 const near=(t,x,y,d,p)=>Q(spatial(t,x,y,d,p))
 const get=id=>{const it=items.get(id);return it?{...it}:null}
 const ref=id=>items.get(id)||null
-const pick=(id,f)=>{const it=items.get(id);if(!it)return null;const o={};for(const k of f)o[k]=it[k];return o}
+const pick=(id,f)=>{const it=items.get(id);if(!it)return null;const o={};for(const k of f){const v=it[k];o[k]=v&&typeof v==='object'?Array.isArray(v)?[...v]:{...v}:v}return o}
 
 const rm=id=>{
 const it=items.get(id);if(!it)return null
@@ -172,7 +184,12 @@ const _batchUpdate=updates=>{
 }
 const _batchDelete=ids=>{
   const del=[]
-  for(const id of ids){const it=rm(id);if(it)del.push(it)}
+  for(const id of ids){
+    const it=items.get(id);if(!it)continue
+    items.delete(id);ui('remove',it);qbump(it.type)
+    meta.get('tx')?.at(-1)?.push({type:'delete',id,item:{...it}})
+    del.push(it)
+  }
   if(del.length){emit('batch',{op:'delete',count:del.length});emit('change',{type:'batch',op:'delete',count:del.length})}
   return del
 }
