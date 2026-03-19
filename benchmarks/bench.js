@@ -33,14 +33,9 @@ function makePRNG(seed) {
 // ── harness ───────────────────────────────────────────────────────────────────
 // WARMUP: fn() is called WARMUP times before any timing begins.
 // This brings V8 to peak JIT for the specific call pattern being measured.
-// Without it early timed runs pay interpretation overhead — create benchmarks
-// measured 2.7× slower on run 1 vs steady-state, skewing the median even at
-// 500 runs. 20 warmup iterations is sufficient for all benchmark types tested.
-//
-// Seeds: warmup uses seed+0..WARMUP-1, timed runs use seed+WARMUP..WARMUP+RUNS-1.
-// No two invocations share a PRNG sequence so JIT can't lock into one pattern.
+// Without it early timed runs pay interpretation overhead  
 const WARMUP = 20
-const RUNS   = 100   // sufficient once JIT is hot; 500 without warmup ≈ 120 with
+const RUNS   = 100   
 
 function time(fn, rand) {
   const t = performance.now()
@@ -331,7 +326,7 @@ function benchQuery(libs) {
       const istinyop = name.includes('tinyop')
       const isLoki    = name === 'LokiJS'
 
-      // Build predicates once — reused across all warmup + timed invocations
+      
       const simplePred  = istinyop ? where.and(where.eq('category', 5), where.eq('active', true)) : null
       const complexPred = istinyop ? where.and(where.gt('value', 5000), where.in('category', [2,4,6,8]), where.eq('active', true)) : null
 
@@ -378,7 +373,7 @@ function benchMixed(libs) {
       const isLoki    = name === 'LokiJS'
       const useRef    = name === 'tinyop (ref)'
 
-      // Build predicates once — not inside the timed loop
+      
       const simplePred  = istinyop ? where.eq('category', 5) : null
       const complexPred = istinyop ? where.and(where.gt('value', 500), where.eq('active', true)) : null
 
@@ -446,7 +441,7 @@ async function benchSpatial() {
   for (let i = 0; i < 10_000; i++)
     ts.create('pt', { x: rand() * 1000, y: rand() * 1000, value: i })
 
-  // Build filtered predicate once — warmup compiles it before measurement
+
   const filteredPred = where.gt('value', 5000)
 
   const { ms: tsMs }  = bench(() => { for (let i = 0; i < 100; i++) ts.near('pt', 500, 500, 100).all() })
