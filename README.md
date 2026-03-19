@@ -4,7 +4,7 @@
 
 Works anywhere with JavaScript and memory.
 
-Tinyop is a typed entity store with spatial indexing, reactive events, and compound queries. 9kB, zero dependencies. The infrastructure you'd otherwise rebuild.
+Tinyop is a typed entity store with spatial indexing, reactive events, and compound queries. 10kB, zero dependencies. The infrastructure you'd otherwise rebuild.
 
 tinyop provides a unified data layer that works identically in browsers, Node.js, and React Native. The core library handles local state with advanced querying; the optional `+` extension adds distributed features with causal consistency.
 
