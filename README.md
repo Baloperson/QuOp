@@ -456,18 +456,26 @@ store.journal.on(op => sendToServer(op))
 
 store.merge(otherStore, 'timestamp')   // last-write-wins by modified timestamp
 ```
+### Distribution benchmark — Node v24.11.1, Intel Xeon Platinum 8370C @ 2.80GHz
 
-### Distribution benchmark — Node v24, Xeon Platinum 8370C
+* 20 warmup runs 100 timed runs (median reported). Cold start 1 run no warmup*
 
-| Operation | Speed |
-|---|---|
-| Journal writes | 267K ops/sec |
-| Clock snapshots | 6.8M ops/sec |
-| Clock merges | 20.5M ops/sec |
-| Export (1K ops) | 745K ops/sec |
-| Affine batch apply (10K items) | 415M items/sec |
+| Operation | Cold Start | Warmed JIT 
+|-----------|------------|------------|
+| Journal writes | **209K ops/sec** | **243K ops/sec** | 
+| Journal query (byTime) | **0.46μs** | **0.34μs** | 
+| Clock snapshots | **1.29M ops/sec** | **6.48M ops/sec** | 
+| Clock merges | **6.32M ops/sec** | **18.8M ops/sec** | 
+| Clock current | **220M ops/sec** | **268M ops/sec** |
+| Operation propagation | **2.47M ops/sec** | **91.2M ops/sec** |
+| Export (1K ops) | **240K ops/sec** | **416K ops/sec** | 
+| Import (100 ops) | **15.2K ops/sec** | **52.0K ops/sec** |
+| Affine single apply | **519M ops/sec** | **1.87B ops/sec** | 
+| Affine batch apply | **188M items/sec** | **498M items/sec** |
 
-Memory overhead: **+81%** per item (~473B → ~856B) from the operation journal, capped at 10,000 entries by default and only allocated when using `tinyop+`.
+**Memory overhead: +81% per item (~473B → ~856B)** from the operation journal, capped at 10,000 entries by default and only allocated when using `tinyop+`.
+> 570M ops/sec is essentially the CPU's maximum speed—5 cycles per operation.
+
 
 ---
 
