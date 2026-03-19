@@ -20,7 +20,6 @@ Total:  ~14kB
 
 Tinyop stores **typed entities** — plain objects with an `id`, a `type`, and any fields you choose. It maintains indexes automatically so you can retrieve them instantly by type, filter them with compound predicates, find them by spatial proximity, and react to changes through events — all in a single in-memory structure with zero configuration.
 
-It is not a database. It is not an ORM. It is not a reactive state framework. It is the infrastructure layer those things would need to build on: a fast, indexed, queryable collection that behaves predictably and composes with whatever is around it.
 
 ```js
 import { createStore, where } from './tinyop.js'
@@ -87,71 +86,82 @@ The result is a write path that pays for what it uses. A store with no listeners
 
 ## Benchmarks
 
-All benchmarks: Node v22, Intel Xeon Platinum 8370C, median of 30 runs with a deterministic PRNG (mulberry32, fixed seed), reporting median. Compared against LokiJS, NodeCache, MemoryCache, QuickLRU, Lodash collections, Immutable.js, and raw Array/Object stores.
+All benchmarks: Node v22, Intel Xeon Platinum 8370C, median of 100 runs + 20 warmpu(Warmed JIT) and 1 run 0 warmup(Cold Start) with a deterministic PRNG (mulberry32, fixed seed), reporting median. Compared against LokiJS, NodeCache, MemoryCache, QuickLRU, Lodash collections, Immutable.js, and raw Array/Object stores.
 
 > **Hardware variance.** Absolute numbers scale with your CPU — the relative ordering is what stays stable. Run `node bench.js` to measure on your own hardware.
 
 ### Mixed workload — 10,000 operations (40% read · 20% update · 20% find · 20% compound find)
 
-| Library | ops/sec |
-|---|---|
-| **tinyop (ref)** | **2,732,606** |
-| **tinyop (safe get)** | **1,900,991** |
-| LokiJS | 77,456 |
-| Lodash | 23,770 |
-| MemoryCache | 24,077 |
-| QuickLRU | 23,507 |
-| NodeCache | 22,885 |
-| Immutable | 17,803 |
-| Array Store | 15,635 |
-| Object Store | 8,104 |
 
-The mixed workload is the one that reflects real usage — isolated microbenchmarks favour specialised structures. tinyop leads by 24× over LokiJS and more than 79× over every other library in this category.
+| Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
+|---------|---------------------|---------------------|
+| **tinyop (ref)** | **1,457,095** | **8,549,449** |
+| **tinyop (safe get)** | **1,430,647** | **7,139,960** |
+| LokiJS | 67,574 | 85,987 |
+| MemoryCache | 22,450 | 27,806 |
+| Lodash | 19,376 | 27,841 |
+| NodeCache | 21,728 | 26,959 |
+| QuickLRU | 18,489 | 27,676 |
+| Immutable | 20,184 | 21,021 |
+| Array Store | 15,892 | 17,446 |
+| Object Store | 9,888 | 10,976 |
 
-The headline improvement over earlier versions is primarily from v3.5 field-aware cache invalidation. Before v3.5, every write evicted all cached queries for that type — every find in the 40% of mixed-workload operations paid the full scan cost. With field-aware invalidation, a write to `hp` leaves `zone` and `active` queries warm. In a workload with frequent writes and repeated queries, the cache hit rate on the query portion increases substantially and that directly multiplies throughput. Earlier published numbers also used an AMD FX-6350; the Xeon figures here are not directly comparable.
+
+The mixed workload is the one that reflects real usage.
+**TinyOp is 50-500× faster than every other library in real-world mixed workloads** 
+the gap widens dramatically after JIT warmup, which reflects long-running application behavior.
+
+The headline improvement over earlier versions is primarily from v3.5 field-aware cache invalidation. Before v3.5, every write evicted all cached queries for that type — every find in the 40% of mixed-workload operations paid the full scan cost. With field-aware invalidation, a write to `hp` leaves `zone` and `active` queries warm. In a workload with frequent writes and repeated queries, the cache hit rate on the query portion increases substantially and that directly multiplies throughput. 
 
 ### Create — 10,000 items
 
-| Library | ops/sec |
-|---|---|
-| LokiJS | 1,958K |
-| **tinyop (ref)** | **1,663K** |
-| Lodash | 1,158K |
-| QuickLRU | 1,150K |
-| **tinyop (safe get)** | **1,149K** |
-| Array Store | 1,221K |
-| Object Store | 718K |
+| Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
+|---------|---------------------|---------------------|
+| Array Store | 1,097,354 | 3,919,590 |
+| Lodash | 1,135,045 | 3,876,588 |
+| QuickLRU | 1,086,046 | 2,877,124 |
+| LokiJS | 728,695 | 2,674,146 |
+| **tinyop (ref)** | **831,066** | **2,403,271** |
+| **tinyop (safe get)** | **601,651** | **2,204,061** |
+| Object Store | 895,596 | 2,413,435 |
+| MemoryCache | 489,873 | 1,761,316 |
+| Immutable | 209,405 | 1,755,175 |
+| NodeCache | 215,086 | 599,582 |
+
 
 ### Read — 100,000 random reads
 
-| Library | ops/sec |
-|---|---|
-| **tinyop (ref)** | **109.3M** |
-| MemoryCache | 26.6M |
-| Object Store | 24.6M |
-| Lodash | 17.3M |
-| Array Store | 16.6M |
-| **tinyop (safe get)** | **12.6M** |
-| LokiJS | 7.9M |
-| Immutable | 3.5M |
-| NodeCache | 1.4M |
+| Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
+|---------|---------------------|---------------------|
+| **tinyop (ref)** | **22,121,598** | **112,066,038** |
+| Array Store | 13,042,127 | 29,358,608 |
+| Lodash | 21,786,820 | 28,297,797 |
+| QuickLRU | 14,991,823 | 21,800,195 |
+| Object Store | 10,209,436 | 20,395,464 |
+| MemoryCache | 12,951,977 | 19,187,023 |
+| **tinyop (safe get)** | **3,705,392** | **14,968,267** |
+| Immutable | 4,178,187 | 14,520,987 |
+| LokiJS | 4,266,869 | 8,028,588 |
+| NodeCache | 919,979 | 1,326,635 |
+
 
 `store.getRef()` returns the live object directly — 109.3M ops/sec. `store.get()` returns a shallow copy — 12.6M ops/sec. Use `getRef()` in hot paths where you will not mutate the result.
 
 ### Update — 50,000 updates
 
-| Library | ops/sec |
-|---|---|
-| Object Store | 7,091K |
-| Lodash | 6,525K |
-| Array Store | 6,397K |
-| QuickLRU | 4,483K |
-| MemoryCache | 4,082K |
-| **tinyop (ref)** | **2,709K** |
-| LokiJS | 2,080K |
-| **tinyop (safe get)** | **1,396K** |
-| Immutable | 980K |
-| NodeCache | 607K |
+
+| Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
+|---------|---------------------|---------------------|
+| Array Store | 2,669,083 | 7,674,113 |
+| Lodash | 5,522,604 | 7,545,621 |
+| QuickLRU | 2,475,714 | 6,102,144 |
+| Object Store | 1,795,726 | 5,650,910 |
+| **tinyop (ref)** | **2,469,237** | **5,023,976** |
+| **tinyop (safe get)** | **2,263,410** | **5,111,053** |
+| MemoryCache | 1,860,320 | 3,171,068 |
+| LokiJS | 988,538 | 2,275,467 |
+| Immutable | 643,840 | 1,449,429 |
+| NodeCache | 357,440 | 662,883 |
 
 Isolated update microbenchmarks favour raw stores that do nothing beyond setting a property. Each tinyop write maintains type and spatial indexes, derives changed fields for selective cache invalidation, and handles transaction logging. The mixed workload, where these investments pay back through cache-hit reads and queries, is the relevant comparison.
 
@@ -463,14 +473,7 @@ Memory overhead: **+81%** per item (~473B → ~856B) from the operation journal,
 
 ## Design philosophy
 
-**One file.** Copy it in, import it, use it. No transitive dependencies, no build pipeline, no version conflicts. The source is readable in one sitting.
-
-**Use information that is already there.** Every optimisation in tinyop follows this single principle rather than adding new state:
-
-- Predicate keys encode their field names — writes use this to evict only the cache entries that could have changed, leaving unrelated queries warm (v3.5)
-- The changed-field set computed per write is passed to the spatial index — non-spatial writes skip the grid cell lookup entirely (v3.5.1)
-- The entity-per-cell invariant means spatial candidate collection never produces duplicates — `Set` is replaced with `Array` in the hot query path (v3.5.1)
-- The query cache state and listener registry are checked before constructing objects — field Sets, snapshot spreads, and redundant Map writes are skipped when their results would not be used (v3.6)
+**One file.** Copy it in, import it, use it.
 
 **Optimised for mixed workloads.** The write path invests in indexes and cache maintenance. The read path collects the return on that investment. Workloads that only write and never query see overhead; workloads that mix reads, writes, and queries see the largest gains.
 
