@@ -86,7 +86,7 @@ The result is a write path that pays for what it uses. A store with no listeners
 
 ## Benchmarks
 
-All benchmarks: Node v22, Intel Xeon Platinum 8370C, median of 100 runs + 20 warmpu(Warmed JIT) and 1 run 0 warmup(Cold Start) with a deterministic PRNG (mulberry32, fixed seed), reporting median. Compared against LokiJS, NodeCache, MemoryCache, QuickLRU, Lodash collections, Immutable.js, and raw Array/Object stores.
+All benchmarks: Node v22, Intel Xeon Platinum 8370C, median of 100 runs + 20 warmup(Warmed JIT) and 1 run 0 warmup(Cold Start) with a deterministic PRNG (mulberry32, fixed seed), reporting median. Compared against LokiJS, NodeCache, MemoryCache, QuickLRU, Lodash collections, Immutable.js, and raw Array/Object stores.
 
 > **Hardware variance.** Absolute numbers scale with your CPU — the relative ordering is what stays stable. Run `node bench.js` to measure on your own hardware.
 
