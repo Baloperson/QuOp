@@ -68,6 +68,6 @@ Open an issue with:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under GPL-3.0, and that you grant the additional rights described in the Contributor License Agreement above.
+By contributing, you agree that your contributions will be licensed under GPL-3.0.
 
 Thanks for contributing.
