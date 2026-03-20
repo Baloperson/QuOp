@@ -66,6 +66,8 @@ Open an issue with:
 
 ---
 
+**Note for contributors**: If you're contributing code you'd like to see included in any future commercial version, please mention this in your PR. We can discuss licensing options on a case-by-case basis.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under GPL-3.0.
