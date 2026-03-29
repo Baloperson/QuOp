@@ -17,6 +17,7 @@
 // v3.6.2: optimized for V8 deop count lowered
 // v3.6.3: fixed transaction + spatial index consistency on rollback
 // v3.6.4: subfield-aware invalidation
+// v3.6.5 includes performance tuning for spatial queries
 const VERSION=Symbol('version'), _k=(f,k)=>(f._key=k,f);
 export const where={
   eq:(k,v)=>_k(i=>i[k]===v,`eq:${k}:${v}`), ne:(k,v)=>i=>i[k]!==v,
@@ -122,7 +123,7 @@ const w = (id, ch, o={}) => {
     const ts=idx.type.get(t), r=[]; if(ts) for(const id of ts){ const it=items.get(id); if(it&&(!p||p(it))) r.push(it); }
     const q=Q(r); if(!m){ if(qi.size>=MAX_QH) qi.delete(qi.keys().next().value); qi.set(rk,new Map().set(t,q)); } else m.set(t,q); return q;
   };
-  const spatial=(type,x,y,max,p)=>{
+  const spatial=(type,x,y,max,p,sorted=true)=>{
     const ts=idx.type.get(type); if(!ts) return[];
     const g=cfg.grid, m=max*max;
     const minCX=Math.floor((x-max)/g), maxCX=Math.floor((x+max)/g);
@@ -137,9 +138,10 @@ const w = (id, ch, o={}) => {
       const dx=p0.x-x, dy=p0.y-y, ds=dx*dx+dy*dy;
       if(ds<=m){ const it=items.get(id); if(it&&(!p||p(it))) r.push({it,ds}); }
     }
-    return r.sort((a,b)=>a.ds-b.ds).map(v=>v.it);
+    if(sorted) r.sort((a,b)=>a.ds-b.ds);
+    return r.map(v=>v.it);
   };
-  const near=(t,x,y,d,p)=>Q(spatial(t,x,y,d,p));
+  const near=(t,x,y,d,p,sorted=true)=>Q(spatial(t,x,y,d,p,sorted));
   const get=id=>{ const it=items.get(id); return it?{...it}:null; };
   const ref=id=>items.get(id)||null;
   const pick=(id,f)=>{ const it=items.get(id); if(!it) return null; const o={}; for(const k of f){ const v=it[k]; o[k]=v&&typeof v=='object'?structuredClone(v):v; } return o; };
