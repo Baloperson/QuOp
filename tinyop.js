@@ -1,4 +1,4 @@
-//    Copyright (C) 2026  R Balog
+// Copyright (C) 2026 R Balog
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -7,16 +7,17 @@
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 // GNU General Public License for more details.
 // You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
 // v3.5: field-aware cache invalidation — writes only evict predicates that touch changed fields
 // v3.5.1: spatial index skip on non-spatial writes; Array cand in near(); batch qbump; qi size guard
 // tinyop.js v3.6.0 - compact store with queries, spatial indexing, views, transactions
 // v3.6.1: adaptive performance — skip Set creation when cache cold, timestamp only when needed,
 // v3.6.2: optimized for V8 deop count lowered
+// v3.6.3: fixed transaction + spatial index consistency on rollback restored _isArray fast-path for cf → no performance regression
+//         
 const VERSION=Symbol('version'), _k=(f,k)=>(f._key=k,f);
 export const where={
   eq:(k,v)=>_k(i=>i[k]===v,`eq:${k}:${v}`), ne:(k,v)=>i=>i[k]!==v,
@@ -52,74 +53,51 @@ export function createStore(o={}){
   };
   const versions=new Map(), qh=new Map(), qi=new Map(), MAX_QH=128;
   const qbump=(t,cf)=>{const hm=qh.get(t);if(hm?.size){if(!cf)hm.clear();else{const d=[];hm.forEach((_,k)=>{const pf=_gf(k);if(cf._isArray){for(let i=0;i<cf.length;i++)if(pf.has(cf[i])){d.push(k);break;}}else{for(const f of cf)if(pf.has(f)){d.push(k);break;}}});for(let i=0;i<d.length;i++)hm.delete(d[i]);}}if(qi.size)for(const m of qi.values())m.delete(t);const v=versions.get(t);if(v){v.version++;v.views.forEach(f=>f());}};
-  const w = (id, ch, o = {}) => {
-    const old = items.get(id);
-    const changes = typeof ch == 'function' ? ch(old) : ch;
-    if (old) {
-      const inTx = !!meta.get('tx');
-      const hasListeners = listeners.has('update') || listeners.has('change');
-      const now = Date.now();
-      const preMutation = { type: old.type, x: old.x, y: old.y };
-      const preMutationForTx = inTx ? { ...old } : null;
-      let snap = !o.silent && hasListeners ? { ...old } : null;
-      if (cfg.types.size && !cfg.types.has(changes.type || old.type)) {
-        throw Error(`Invalid type: ${changes.type || old.type}`);
+const w = (id, ch, o={}) => {
+    const old=items.get(id), changes=typeof ch=='function'?ch(old):ch;
+    if(old){
+      const inTx=!!meta.get('tx'), hasListeners=listeners.has('update')||listeners.has('change'), now=Date.now();
+      const oldForTx=inTx?{...old}:null, oldForUi={type:old.type,x:old.x,y:old.y};
+      let snap=!o.silent&&hasListeners?{...old}:null;
+
+      if(cfg.types.size&&!cfg.types.has(changes?.type||old.type)) throw Error(`Invalid type: ${changes?.type||old.type}`);
+
+      if(changes&&typeof changes=='object'&&changes.constructor===Object){
+        const ks=Object.keys(changes);
+        for(let i=0;i<ks.length;i++) old[ks[i]]=changes[ks[i]];
+      }else if(changes) Object.assign(old,changes);
+
+      old.modified=now;
+
+      const qhType=qh.get(old.type);
+      let cf=null;
+      if(qhType?.size&&changes&&typeof changes=='object'&&changes.constructor===Object){
+        const ks=Object.keys(changes);
+        cf=ks.length<8 ? {has:f=>ks.includes(f),size:ks.length,_isArray:true} : new Set(ks);
       }
-      if (changes && changes.constructor === Object) {
-        const ks = Object.keys(changes);
-        for (let i = 0; i < ks.length; i++) old[ks[i]] = changes[ks[i]];
-      } else {
-        Object.assign(old, changes);
+
+      const hasSpatial= !cf || (cf._isArray ? cf.has('x')||cf.has('y') : cf.has('x')||cf.has('y'));
+
+      ui('update',old,oldForUi,hasSpatial);
+      if(cf) qbump(old.type,cf);
+
+      if(!o.silent&&hasListeners){
+        emit('update',{id,item:old,old:snap});
+        emit('change',{type:'update',id,item:old});
       }
-      old.modified = now;
-      const qhType = qh.get(old.type);
-      const isObj = changes && changes.constructor === Object;
-      const ks = isObj ? Object.keys(changes) : [];
-      let cf = null;
-      if (qhType?.size && isObj) {
-        cf = ks.length < 8 
-          ? { has: f => ks.includes(f), size: ks.length, _isArray: true }
-          : new Set(ks);
-      }
-      const hasSpatialChange = !cf || (cf._isArray ? cf.has('x') || cf.has('y') : cf.has('x') || cf.has('y'));
-      ui('update', old, preMutation, hasSpatialChange);
-      if (cf) qbump(old.type, cf);
-      if (!o.silent && hasListeners) {
-        emit('update', { id, item: old, old: snap });
-        emit('change', { type: 'update', id, item: old });
-      }
-      if (inTx) {
-        meta.get('tx').at(-1).push({ type: 'update', id, old: preMutationForTx, new: { ...old } });
-      }
+      if(inTx) meta.get('tx').at(-1).push({type:'update',id,old:oldForTx,new:{...old}});
       return old;
-    } 
-    else {
-      const now = Date.now();
-      const it = { id, created: now, modified: now, ...changes };
-      if (cfg.types.size && !cfg.types.has(it.type)) {
-        throw Error(`Invalid type: ${it.type}`);
+    }else{
+      const now=Date.now(), it={id,created:now,modified:now,...changes};
+      if(cfg.types.size&&!cfg.types.has(it.type)) throw Error(`Invalid type: ${it.type}`);
+      items.set(id,it); ui('add',it,null,null); qbump(it.type,null);
+      if(!o.silent){
+        emit('create',{id,item:it,old:null});
+        emit('change',{type:'create',id,item:it});
       }
-      items.set(id, it);
-      ui('add', it, null, null);
-      qbump(it.type, null);
-      if (!o.silent) {
-        emit('create', { id, item: it, old: null });
-        emit('change', { type: 'create', id, item: it });
-      }
-      if (meta.get('tx')) {
-        meta.get('tx').at(-1).push({ type: 'create', id, old: null, new: { ...it } });
-      }
+      if(meta.get('tx')) meta.get('tx').at(-1).push({type:'create',id,old:null,new:{...it}});
       return it;
     }
-};  const spatial=(type,x,y,max,p)=>{ const ts=idx.type.get(type); if(!ts) return[];
-    const g=cfg.grid, m=max*max, minCX=Math.floor((x-max)/g), maxCX=Math.floor((x+max)/g), minCY=Math.floor((y-max)/g), maxCY=Math.floor((y+max)/g);
-    const cand=[], r=[];
-    for(let cx=minCX; cx<=maxCX; cx++) for(let cy=minCY; cy<=maxCY; cy++) idx.spatial.get(cx*1e9+cy)?.forEach(id=>ts.has(id)&&cand.push(id));
-    for(const id of cand){ const p0=idx.coords.get(id); if(!p0) continue;
-      const dx=p0.x-x, dy=p0.y-y, ds=dx*dx+dy*dy;
-      if(ds<=m){ const it=items.get(id); if(it&&(!p||p(it))) r.push({it,ds}); }
-    }
-    return r.sort((a,b)=>a.ds-b.ds).map(v=>v.it);
   };
   const Q=a=>({ all:()=>a, first:()=>a[0]||null, last:()=>a.at(-1)||null, count:()=>a.length, ids:()=>a.map(x=>x.id),
     limit:n=>Q(a.slice(0,n)), offset:n=>Q(a.slice(n)), sort:f=>Q([...a].sort((x,y)=>(x[f]??0)<(y[f]??0)?-1:1)) });
@@ -149,16 +127,28 @@ export function createStore(o={}){
     emit('delete',{id,item:it}); emit('change',{type:'delete',id,item:it});
     meta.get('tx')?.at(-1)?.push({type:'delete',id,item:{...it}}); return it;
   };
-  const tx=fn=>{ const t=meta.get('tx')||[]; meta.set('tx',[...t,[]]);
-    try{ const r=fn(); meta.set('tx',t); return r; }
-    catch(e){ for(const op of meta.get('tx').pop().reverse()){
-      if(op.type=='create'){ items.delete(op.id); ui('remove',op.new); }
-      else if(op.type=='update'){ items.set(op.id,op.old); ui('update',op.old,op.new); }
-      else{ items.set(op.id,op.item); ui('add',op.item,null); }
-    } meta.set('tx',t); throw e; }
+const tx=fn=>{ 
+    const t=meta.get('tx')||[]; 
+    meta.set('tx',[...t,[]]);
+    try{ 
+      const r=fn(); 
+      meta.set('tx',t); 
+      return r; 
+    }catch(e){
+      for(const op of meta.get('tx').pop().reverse()){
+        if(op.type=='create'){ items.delete(op.id); ui('remove',op.new); }
+        else if(op.type=='update'){ 
+          items.set(op.id,op.old); 
+          ui('update',op.old,{type:op.old.type,x:op.old.x,y:op.old.y},true); 
+        }
+        else{ items.set(op.id,op.item); ui('add',op.item,null,null); }
+      }
+      meta.set('tx',t); 
+      throw e; 
+    }
   };
   const createOne=(t,p={})=>w(p.id||cfg.id(),{type:t,...cfg.defs[t],...p});
-  const _batchUpdate=updates=>{ const res=[]; 
+  const _batchUpdate=updates=>{ const res=[];
     for(const{id,changes}of updates){ const r=items.has(id)?w(id,changes,{silent:true}):null; if(r) res.push(r); }
     if(res.length){ emit('batch',{op:'update',count:res.length}); emit('change',{type:'batch',op:'update',count:res.length}); }
     return res;
