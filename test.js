@@ -1,9 +1,9 @@
-// tinyop.js test suite
+// QuOp.js test suite
 // usage: node --test test.js
 
 import { describe, it, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { createStore, where } from './tinyop.js'
+import { createStore, where } from './QuOp.js'
 
 function makeStore(opts) { return createStore(opts) }
 
