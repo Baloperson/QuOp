@@ -1,8 +1,8 @@
-// tinyop.js benchmark suite
+// QuOp.js benchmark suite
 // usage:  node --expose-gc bench.js
 // deps:   npm install lokijs lodash immutable rbush flatbush node-cache memory-cache quick-lru
 
-import { createStore as createtinyop, where } from '../QuOp.js'
+import { createStore as createQuOp, where } from '../QuOp.js'
 
 
 // ── optional libraries ────────────────────────────────────────────────────────
@@ -108,9 +108,9 @@ class ObjectStore {
 function buildLibraries() {
   const libs = new Map()
 
-  // tinyop — two read paths tested separately
-  libs.set('tinyop (safe get)', () => createtinyop())
-  libs.set('tinyop (ref)',      () => createtinyop())
+  // QuOp — two read paths tested separately
+  libs.set('QuOp (safe get)', () => createQuOp())
+  libs.set('QuOp (ref)',      () => createQuOp())
 
   libs.set('Array Store',  () => new ArrayStore())
   libs.set('Object Store', () => new ObjectStore())
@@ -278,7 +278,7 @@ function benchRead(libs) {
       for (let i = 0; i < 1000; i++) {
         const item = store.create('test', { value: i }); ids.push(item.id)
       }
-      const useRef = name === 'tinyop (ref)'
+      const useRef = name === 'QuOp (ref)'
       const { ms } = bench(rand => {
         for (let i = 0; i < N; i++) {
           const id = ids[rand() * ids.length | 0]
@@ -323,25 +323,25 @@ function benchQuery(libs) {
       for (let i = 0; i < 10_000; i++)
         store.create('test', { value: i, category: i % 10, active: i % 2 === 0, score: setupRand() * 100 })
 
-      const istinyop = name.includes('tinyop')
+      const isQuOp = name.includes('QuOp')
       const isLoki    = name === 'LokiJS'
 
       
-      const simplePred  = istinyop ? where.and(where.eq('category', 5), where.eq('active', true)) : null
-      const complexPred = istinyop ? where.and(where.gt('value', 5000), where.in('category', [2,4,6,8]), where.eq('active', true)) : null
+      const simplePred  = isQuOp ? where.and(where.eq('category', 5), where.eq('active', true)) : null
+      const complexPred = isQuOp ? where.and(where.gt('value', 5000), where.in('category', [2,4,6,8]), where.eq('active', true)) : null
 
       const { ms: sMs } = bench(() => {
         for (let i = 0; i < 100; i++) {
-          if (istinyop) store.find('test', simplePred)
+          if (isQuOp) store.find('test', simplePred)
           else store.find('test', { category: 5, active: true })
         }
       })
 
       let cStr = 'N/A'
-      if (istinyop || isLoki) {
+      if (isQuOp || isLoki) {
         const { ms: cMs } = bench(() => {
           for (let i = 0; i < 100; i++) {
-            if (istinyop)
+            if (isQuOp)
               store.find('test', complexPred)
             else
               store.find('test', { value: { $gt: 5000 }, category: { $in: [2,4,6,8] }, active: true })
@@ -369,13 +369,13 @@ function benchMixed(libs) {
         })
         ids.push(item.id)
       }
-      const istinyop = name.includes('tinyop')
+      const isQuOp = name.includes('QuOp')
       const isLoki    = name === 'LokiJS'
-      const useRef    = name === 'tinyop (ref)'
+      const useRef    = name === 'QuOp (ref)'
 
       
-      const simplePred  = istinyop ? where.eq('category', 5) : null
-      const complexPred = istinyop ? where.and(where.gt('value', 500), where.eq('active', true)) : null
+      const simplePred  = isQuOp ? where.eq('category', 5) : null
+      const complexPred = isQuOp ? where.and(where.gt('value', 500), where.eq('active', true)) : null
 
       const { ms } = bench(rand => {
         for (let i = 0; i < N; i++) {
@@ -389,10 +389,10 @@ function benchMixed(libs) {
                       : store.update(id, { value: rand() * 1000 | 0 })
           } else if (r < 0.8) {
             const cat = rand() * 10 | 0
-            if (istinyop) store.find('test', simplePred)
+            if (isQuOp) store.find('test', simplePred)
             else store.find('test', { category: cat })
           } else {
-            if (istinyop)
+            if (isQuOp)
               store.find('test', complexPred)
             else if (isLoki)
               store.find('test', { value: { $gt: 500 }, active: true })
@@ -436,7 +436,7 @@ async function benchSpatial() {
   console.log('\n  SPATIAL QUERY PERFORMANCE (avg over 100 queries, 10,000 points)')
   console.log('-'.repeat(60))
 
-  const ts = createtinyop()
+  const ts = createQuOp()
   const rand = makePRNG(1)
   for (let i = 0; i < 10_000; i++)
     ts.create('pt', { x: rand() * 1000, y: rand() * 1000, value: i })
@@ -446,8 +446,8 @@ async function benchSpatial() {
 
   const { ms: tsMs }  = bench(() => { for (let i = 0; i < 100; i++) ts.near('pt', 500, 500, 100).all() })
   const { ms: tsFMs } = bench(() => { for (let i = 0; i < 100; i++) ts.near('pt', 500, 500, 100, filteredPred).all() })
-  console.log(`${pad('tinyop Spatial', 28)}: ${(tsMs/100).toFixed(3)}ms avg`)
-  console.log(`${pad('tinyop Spatial (filtered)', 28)}: ${(tsFMs/100).toFixed(3)}ms avg`)
+  console.log(`${pad('QuOp Spatial', 28)}: ${(tsMs/100).toFixed(3)}ms avg`)
+  console.log(`${pad('QuOp Spatial (filtered)', 28)}: ${(tsFMs/100).toFixed(3)}ms avg`)
 
   if (RBush) {
     const tree = new RBush(); const pts = []
@@ -473,7 +473,7 @@ async function benchSpatial() {
 // ── main ──────────────────────────────────────────────────────────────────────
 
 console.log('='.repeat(70))
-console.log(' tinyop.JS BENCHMARK ')
+console.log(' QuOp.JS BENCHMARK ')
 console.log('='.repeat(70))
 console.log(`Node ${process.version} | ${new Date().toLocaleTimeString()} | ${WARMUP} warmup + ${RUNS} timed runs, reporting median`)
 if (!global.gc) console.log('⚠  run with --expose-gc for memory metrics')
