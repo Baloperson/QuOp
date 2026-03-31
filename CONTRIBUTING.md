@@ -1,6 +1,6 @@
-# Contributing to tinyop
+# Contributing to QuOp
 
-Thanks for taking the time to contribute. tinyop is a small, focused library and contributions should stay consistent with that — fixes, edge cases, and well-reasoned additions, not feature creep.
+Thanks for taking the time to contribute. QuOp is a small, focused library and contributions should stay consistent with that — fixes, edge cases, and well-reasoned additions, not feature creep.
 
 By submitting a pull request, issue fix, or any other contribution to this repository, you agree that:
 
@@ -23,7 +23,7 @@ By submitting a pull request, issue fix, or any other contribution to this repos
 - New API methods or changes to existing method signatures
 - Changes to the spatial indexing strategy or query engine
 - Anything that would increase the bundle size meaningfully
-- `tinyop+` changes involving sync or vector clock behaviour
+- `QuOp+` changes involving sync or vector clock behaviour
 
 **Out of scope:**
 - Persistence backends — `store.dump()` and `store.checkpoint()` are the persistence boundary
@@ -47,13 +47,13 @@ By submitting a pull request, issue fix, or any other contribution to this repos
 
 ## Code style
 
-tinyop core is intentionally dense. Match the existing style:
+QuOp core is intentionally dense. Match the existing style:
 
 - No dependencies, no build step
 - Compact but not obfuscated — variable names should be readable in context
 - New public API methods follow the existing naming conventions (`find`, `near`, `get`, `create`, etc.)
 - No TypeScript in the source files
-- No comments in the minified-style sections of `tinyop.js` — the README is the documentation
+- No comments in the minified-style sections of `QuOp.js` — the README is the documentation
 
 ---
 
@@ -61,7 +61,7 @@ tinyop core is intentionally dense. Match the existing style:
 
 Open an issue with:
 
-- The version of `tinyop.js` you are using
+- The version of `QuOp.js` you are using
 - A minimal reproduction — ideally a self-contained code snippet
 - What you expected to happen and what actually happened
 - Node version and environment if relevant (browser, React Native, etc.)
