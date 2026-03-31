@@ -1,8 +1,8 @@
-// bench.plus.js — tinyop+ distributed benchmark suite 
+// bench.plus.js — QuOp+ distributed benchmark suite 
 // usage: node --expose-gc bench.plus.js
 
-import { createStore }                    from '../tinyop.plus.js'
-import { createStore as base, where }     from '../tinyop.js'
+import { createStore }                    from '../QuOp.plus.js'
+import { createStore as base, where }     from '../QuOp.js'
 import os from 'os'
 
 const WARMUP = 0
@@ -450,10 +450,10 @@ async function benchMemory() {
   const { mem: baseMem } = await measureStore(() => base())
   const { store: plusStore, mem: plusMem } = await measureStore(() => createStore({ processId: 'mem-test' }))
 
-  console.log(`Base tinyop (10k items):`)
+  console.log(`Base QuOp (10k items):`)
   console.log(`  Total:    ${fmtB(baseMem)}`)
   console.log(`  Per item: ${fmtB(baseMem/10_000)}`)
-  console.log(`\ntinyop+ (10k items):`)
+  console.log(`\nQuOp+ (10k items):`)
   console.log(`  Total:    ${fmtB(plusMem)}`)
   console.log(`  Per item: ${fmtB(plusMem/10_000)}`)
   console.log(`  Overhead: ${fmtB(plusMem-baseMem)} (${((plusMem-baseMem)/baseMem*100).toFixed(1)}%)`)
@@ -462,7 +462,7 @@ async function benchMemory() {
 
 // ── main ───────────────────────────────────────────────────────────────────────
 console.log('='.repeat(70))
-console.log(' tinyop+ DISTRIBUTED BENCHMARK SUITE ')
+console.log(' QuOp+ DISTRIBUTED BENCHMARK SUITE ')
 console.log('='.repeat(70))
 console.log(`Node ${process.version} | ${new Date().toLocaleTimeString()} | ${WARMUP} warmup + ${RUNS} timed runs, reporting median`)
 console.log(`CPU: ${os.cpus()[0].model}`)
