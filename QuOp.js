@@ -12,10 +12,10 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 // v3.5: field-aware cache invalidation — writes only evict predicates that touch changed fields
 // v3.5.1: spatial index skip on non-spatial writes; Array cand in near(); batch qbump; qi size guard
-// tinyop.js v3.6.0 - compact store with queries, spatial indexing, views, transactions
-// v3.6.1: adaptive performance — skip Set creation when cache cold, timestamp only when needed,
+// v3.6.0: compact store with queries, spatial indexing, views, transactions
+// v3.6.1: adaptive performance  skip Set creation when cache cold, timestamp only when needed,
 // v3.6.2: optimized for V8 deop count lowered
-// v3.6.3: fixed transaction + spatial index consistency on rollback
+// v3.6.3: fixed transaction and spatial index consistency on rollback
 // v3.6.4: subfield-aware invalidation
 // v3.6.5 includes performance tuning for spatial queries
 const VERSION=Symbol('version'), _k=(f,k)=>(f._key=k,f);
