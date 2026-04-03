@@ -87,20 +87,18 @@ The result is a write path that pays for what it uses. A store with no listeners
 To take advantage of QuOps cache, its a good idea to choose a abstraction level such that one entity is sparse in changes.
 
 ---
-
 ## Benchmarks
 
-All benchmarks: Node v22, Intel Xeon Platinum 8370C, median of 100 runs + 20 warmup(Warmed JIT) and 1 run 0 warmup(Cold Start) with a deterministic PRNG (mulberry32, fixed seed), reporting median. Compared against LokiJS, NodeCache, MemoryCache, QuickLRU, Lodash collections, Immutable.js, and raw Array/Object stores.
+All benchmarks: Node v24, Intel Xeon Platinum 8370C, median of 100 runs + 20 warmup (Warmed JIT) and 1 run 0 warmup (Cold Start) with a deterministic PRNG (mulberry32, fixed seed), reporting median. Compared against LokiJS, NodeCache, MemoryCache, QuickLRU, Lodash collections, Immutable.js, and raw Array/Object stores.
 
-> **Hardware variance.** Absolute numbers scale with your CPU — the relative ordering is what stays stable. Run `node bench.js` to measure on your own hardware.
+> **Hardware variance.** Absolute numbers scale with your CPU — the relative ordering is what stays stable. Run `node bench.js` to measure on your own hardware. These numbers come from the second run when running the benchmark twice in a row (which affects V8)
 
 ### Mixed workload — 10,000 operations (40% read · 20% update · 20% find · 20% compound find)
 
-
 | Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
 |---------|---------------------|---------------------|
-| **QuOp (ref)** | **1,457,095** | **8,549,449** |
-| **QuOp (safe get)** | **1,430,647** | **7,139,960** |
+| **QuOp (ref)** | **1,457,095** | **12,534,046** |
+| **QuOp (safe get)** | **1,430,647** | **9,499,256** |
 | LokiJS | 67,574 | 85,987 |
 | MemoryCache | 22,450 | 27,806 |
 | Lodash | 19,376 | 27,841 |
@@ -110,83 +108,80 @@ All benchmarks: Node v22, Intel Xeon Platinum 8370C, median of 100 runs + 20 war
 | Array Store | 15,892 | 17,446 |
 | Object Store | 9,888 | 10,976 |
 
-
 The mixed workload is the one that reflects real usage.
 The gap between QuOp and LokiJS widens after JIT warmup, which reflects long-running application behavior.
 
-The improvement over earlier versions is primarily from v3.5 field-aware cache invalidation. Before v3.5, every write evicted all cached queries for that type — every find in the 40% of mixed-workload operations paid the full scan cost. With field-aware invalidation, a write to `hp` leaves `zone` and `active` queries warm. In a workload with frequent writes and repeated queries, the cache hit rate on the query portion increases substantially and that directly multiplies throughput. 
+The improvement over earlier versions is primarily from field-aware invalidation (v3.5) which prevents unrelated queries from being evicted; subfield-aware invalidation (v3.6.4) extends this to nested objects, so x.foo updates don't touch x.bar queries; and adaptive write-path optimizations (v3.6.5) ensure work is only done when needed. 
 
 ### Create — 10,000 items
 
 | Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
 |---------|---------------------|---------------------|
-| Array Store | 1,097,354 | 3,919,590 |
-| Lodash | 1,135,045 | 3,876,588 |
-| QuickLRU | 1,086,046 | 2,877,124 |
-| LokiJS | 728,695 | 2,674,146 |
-| **QuOp (ref)** | **831,066** | **2,403,271** |
-| **QuOp (safe get)** | **601,651** | **2,204,061** |
-| Object Store | 895,596 | 2,413,435 |
-| MemoryCache | 489,873 | 1,761,316 |
-| Immutable | 209,405 | 1,755,175 |
-| NodeCache | 215,086 | 599,582 |
-
+| Array Store | 1,097,354 | 3,811,856 |
+| Lodash | 1,135,045 | 3,837,502 |
+| QuickLRU | 1,086,046 | 2,885,454 |
+| LokiJS | 728,695 | 2,653,733 |
+| **QuOp (ref)** | **831,066** | **2,539,591** |
+| Object Store | 895,596 | 2,423,604 |
+| **QuOp (safe get)** | **601,651** | **2,526,823** |
+| MemoryCache | 489,873 | 1,748,847 |
+| Immutable | 209,405 | 1,841,940 |
+| NodeCache | 215,086 | 598,849 |
 
 ### Read — 100,000 random reads
 
 | Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
 |---------|---------------------|---------------------|
-| **QuOp (ref)** | **22,121,598** | **112,066,038** |
-| Array Store | 13,042,127 | 29,358,608 |
-| Lodash | 21,786,820 | 28,297,797 |
-| QuickLRU | 14,991,823 | 21,800,195 |
-| Object Store | 10,209,436 | 20,395,464 |
-| MemoryCache | 12,951,977 | 19,187,023 |
-| **QuOp (safe get)** | **3,705,392** | **14,968,267** |
-| Immutable | 4,178,187 | 14,520,987 |
-| LokiJS | 4,266,869 | 8,028,588 |
-| NodeCache | 919,979 | 1,326,635 |
+| **QuOp (ref)** | **22,121,598** | **110,336,183** |
+| Array Store | 13,042,127 | 28,920,875 |
+| Lodash | 21,786,820 | 27,429,266 |
+| QuickLRU | 14,991,823 | 22,094,101 |
+| Object Store | 10,209,436 | 20,751,822 |
+| MemoryCache | 12,951,977 | 18,555,409 |
+| Immutable | 4,178,187 | 14,455,020 |
+| **QuOp (safe get)** | **3,705,392** | **15,287,229** |
+| LokiJS | 4,266,869 | 8,021,154 |
+| NodeCache | 919,979 | 1,518,299 |
 
-
-`store.getRef()` returns the live object directly — 109.3M ops/sec. `store.get()` returns a shallow copy — 12.6M ops/sec. Use `getRef()` in hot paths where you will not mutate the result.
+`store.getRef()` returns the live object directly — **110M ops/sec**. `store.get()` returns a shallow copy — 15M ops/sec. Use `getRef()` in hot paths where you will not mutate the result.
 
 ### Update — 50,000 updates
 
-
 | Library | Cold Start (ops/sec) | Warmed JIT (ops/sec) |
 |---------|---------------------|---------------------|
-| Array Store | 2,669,083 | 7,674,113 |
-| Lodash | 5,522,604 | 7,545,621 |
-| QuickLRU | 2,475,714 | 6,102,144 |
-| Object Store | 1,795,726 | 5,650,910 |
-| **QuOp (ref)** | **2,469,237** | **5,023,976** |
-| **QuOp (safe get)** | **2,263,410** | **5,111,053** |
-| MemoryCache | 1,860,320 | 3,171,068 |
-| LokiJS | 988,538 | 2,275,467 |
-| Immutable | 643,840 | 1,449,429 |
-| NodeCache | 357,440 | 662,883 |
+| Array Store | 2,669,083 | 7,788,424 |
+| Lodash | 5,522,604 | 7,392,400 |
+| QuickLRU | 2,475,714 | 6,040,784 |
+| Object Store | 1,795,726 | 5,525,286 |
+| **QuOp (safe get)** | **2,263,410** | **5,387,260** |
+| **QuOp (ref)** | **2,469,237** | **5,272,162** |
+| MemoryCache | 1,860,320 | 3,177,696 |
+| LokiJS | 988,538 | 2,281,605 |
+| Immutable | 643,840 | 1,580,428 |
+| NodeCache | 357,440 | 658,454 |
 
 Isolated update microbenchmarks favour raw stores that do nothing beyond setting a property. Each QuOp write maintains type and spatial indexes, derives changed fields for selective cache invalidation, and handles transaction logging. The mixed workload, where these investments pay back through cache-hit reads and queries, is the relevant comparison.
+
 
 ### Query — avg latency per query, 10,000 entities
 
 | Library | Simple | Compound | Repeat |
 |---|---|---|---|
 | **QuOp** | **<0.01ms** | **<0.01ms** | **~0.00ms** |
-| LokiJS | 0.04ms | 0.41ms | 0.41ms |
-| MemoryCache | 0.64ms | N/A | 0.64ms |
-| Array Store | 2.18ms | N/A | 2.18ms |
-| Object Store | 5.26ms | N/A | 5.26ms |
+| LokiJS | 0.04ms | 0.35ms | 0.35ms |
+| MemoryCache | 0.55ms | N/A | 0.55ms |
+| Array Store | 1.88ms | N/A | 1.88ms |
+| Object Store | 3.98ms | N/A | 3.98ms |
 
-LokiJS is the only other library with native compound operator support. Every repeat query pays 0.41ms regardless of what changed. QuOp's field-aware invalidation keeps unrelated predicates warm, so repeated access between writes is effectively free.
+LokiJS is the only other library with native compound operator support. Every repeat query pays 0.35ms regardless of what changed. QuOp's field-aware invalidation keeps unrelated predicates warm, so repeated access between writes is effectively free.
 
 ### Spatial — avg per query, 10,000 points
 
 | | Unfiltered | Filtered |
 |---|---|---|
-| RBush | 0.008ms | — |
+| RBush | 0.004ms | — |
 | Flatbush | 0.008ms | — |
-| **QuOp** | **0.080ms** | **0.051ms** |
+| **QuOp** | **0.074ms** | **0.048ms** |
 
 The filtered path is faster than unfiltered because the predicate prunes candidates before distance computation. For pure geometry without type filtering, RBush or Flatbush is faster. For `"all entities within range that match these conditions"` in one call, QuOp handles it natively.
 
@@ -194,18 +189,16 @@ The filtered path is faster than unfiltered because the predicate prunes candida
 
 | Library | Per item |
 |---|---|
-| Object Store | 572B |
-| **QuOp** | **~601B** |
-| Array Store | 637B |
-| LokiJS | 699B |
-| NodeCache | 1.04KB |
+| Object Store | 545B |
+| **QuOp** | **~602B** |
+| Array Store | 559B |
+| LokiJS | 698B |
+| NodeCache | 1.02KB |
 
----
 
-## Installation
 
 ```bash
-npm install QuOp
+npm install queryop
 ```
 
 ```js
@@ -518,3 +511,8 @@ Full type definitions are included.
 | v3.5 | Field-aware cache invalidation — writes evict only predicates whose fields intersect the changed fields |
 | v3.5.1 | Spatial skip on non-spatial writes; `Array` candidate collection in `near()`; batch `qbump`; `qi` size guard |
 | v3.6 | Adaptive computation — defer Set construction, snapshot spreads, and index updates to when they are actually needed |
+| v3.6.1 | 	Adaptive performance — skip Set creation when cache cold, timestamp only when needed | 
+| v3.6.2 | 	Optimized for V8 — deoptimization count lowered, stable hidden classes | 
+| v3.6.3 | 	Fixed transaction + spatial index consistency on rollback — restored _isArray fast-path, no performance regression | 
+| v3.6.4 | 	Subfield-aware invalidation — nested object changes only invalidate affected paths | 
+| v3.6.5 | 	Spatial query performance tuning — optional sorted parameter skips distance sorting when order doesn't matter | 
